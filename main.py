@@ -1,44 +1,48 @@
 import xml.etree.ElementTree as ET
-import hashlib
-import pandas as pd
+import difflib
+import os
 
 # Function to read the Alteryx workflow XML content
 def read_workflow_xml(file_path):
-    tree = ET.parse(file_path)
-    root = tree.getroot()
-    return ET.tostring(root, encoding='utf8').decode('utf8')
+    with open(file_path, 'r') as file:
+        return file.read()
 
-# Function to hash the XML content
-def hash_content(content):
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
+# Function to save the current version of the workflow
+def save_current_version(content, version_file_path):
+    with open(version_file_path, 'w') as file:
+        file.write(content)
 
-# Functions to save and read the latest hash to/from a file
-def save_hash_to_file(hash_value, file_path='latest_hash.txt'):
-    with open(file_path, 'w') as file:
-        file.write(hash_value)
+# Function to get the previous version of the workflow if it exists
+def get_previous_version(version_file_path):
+    if os.path.exists(version_file_path):
+        with open(version_file_path, 'r') as file:
+            return file.read()
+    return None
 
-def read_hash_from_file(file_path='latest_hash.txt'):
-    try:
-        with open(file_path, 'r') as file:
-            return file.read().strip()
-    except FileNotFoundError:
-        return None
-
-# Function to detect changes and log them
-def detect_and_log_changes(new_content, log_file='change_log.txt'):
-    new_hash = hash_content(new_content)
-    old_hash = read_hash_from_file()
-    
-    if new_hash != old_hash:
-        with open(log_file, 'a') as log:
-            log.write(f"Change detected at {pd.Timestamp.now()}: Old Hash: {old_hash}, New Hash: {new_hash}\n")
-        save_hash_to_file(new_hash)
-        print("Change detected and logged.")
-    else:
-        print("No changes detected.")
+# Function to log differences between the current and previous versions
+def log_differences(current_content, previous_content, log_file):
+    diff = difflib.unified_diff(
+        previous_content.splitlines(keepends=True),
+        current_content.splitlines(keepends=True),
+        fromfile='previous_version',
+        tofile='current_version',
+    )
+    with open(log_file, 'a') as log:
+        log.writelines(diff)
 
 # Main execution flow
 if __name__ == "__main__":
     workflow_path = 'path_to_your_workflow.yxmd'  # Update this path to your actual Alteryx workflow file path
-    workflow_content = read_workflow_xml(workflow_path)
-    detect_and_log_changes(workflow_content)
+    version_file_path = 'path_to_your_version_file.txt'  # Path where the current version of the workflow is saved
+    change_log_path = 'path_to_your_change_log.txt'  # Path to the change log file
+
+    current_content = read_workflow_xml(workflow_path)
+    previous_content = get_previous_version(version_file_path)
+
+    if current_content != previous_content:
+        if previous_content is not None:  # If it's not the first run
+            log_differences(current_content, previous_content, change_log_path)
+            print("Changes detected and logged.")
+        save_current_version(current_content, version_file_path)
+    else:
+        print("No changes detected.")
